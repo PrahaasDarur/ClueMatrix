@@ -1,6 +1,8 @@
 ﻿import os
 import uuid
 
+import httpx
+
 try:
     import pytesseract
 except ImportError:
@@ -18,22 +20,56 @@ except ImportError:
 
 try:
     from database.session import SessionLocal
-    from database.models import EvidenceFile, ExtractedEntity, Relationships
+    from database.models import EvidenceFile, ExtractedEntity
 except ImportError:
     SessionLocal = None
     EvidenceFile = None
     ExtractedEntity = None
-    Relationships = None
+
+AI_SERVICE_URL = os.getenv(
+    "AI_SERVICE_URL",
+    "http://127.0.0.1:8000",
+)
 
 if spacy is not None:
     try:
         nlp = spacy.load("en_core_web_sm")
-        print("✅ spaCy model loaded successfully.")
+        print("spaCy model loaded successfully.")
     except OSError:
-        print("❌ ERROR: spaCy model 'en_core_web_sm' not found. Did you run 'python -m spacy download en_core_web_sm'?")
+        print("ERROR: spaCy model 'en_core_web_sm' not found. Did you run 'python -m spacy download en_core_web_sm'?")
         nlp = None
 else:
     nlp = None
+
+
+def analyze_with_ai_service(
+    raw_text: str,
+    evidence_id: str,
+    source_filename: str,
+) -> list[dict]:
+    """Send extracted text to the dedicated ClueMatrix AI service."""
+    payload = {
+        "evidence_id": evidence_id,
+        "source_filename": source_filename,
+        "page_number": 1,
+        "text": raw_text,
+    }
+
+    try:
+        response = httpx.post(
+            f"{AI_SERVICE_URL}/analyze/evidence",
+            json=payload,
+            timeout=120.0,
+        )
+        response.raise_for_status()
+        result = response.json()
+        entities = result["entities"]
+        if not isinstance(entities, list):
+            raise ValueError("AI service response 'entities' must be a list.")
+        return entities
+    except httpx.HTTPError as exc:
+        print(f"[AI SERVICE ERROR] {exc}")
+        raise
 
 
 def perform_ocr(image_path: str) -> str:
@@ -94,55 +130,34 @@ def perform_nlp_analysis(raw_text: str, evidence_id: str):
 
 
 def save_analysis_to_db(evidence_id: str, entities: list):
-    """Persist extracted entities and sentence-based relationships."""
-    if SessionLocal is None or ExtractedEntity is None or Relationships is None:
-        print("--- DATABASE WARNING: Database models/session are unavailable. Skipping persistence. ---")
-        return
+    """Persist entities returned by the AI service."""
+    if SessionLocal is None or ExtractedEntity is None:
+        raise RuntimeError("Database models/session unavailable.")
 
     session = SessionLocal()
     try:
         for entity in entities:
+            context = None
+            methods = entity.get("methods", [])
+            extraction_method = ", ".join(methods) if methods else "unknown"
+
             new_entity = ExtractedEntity(
                 evidence_file_id=evidence_id,
                 entity_type=entity["type"],
                 value=entity["value"],
-                context=entity["context"],
+                context=context,
+                start_offset=entity.get("start"),
+                end_offset=entity.get("end"),
+                extraction_method=extraction_method,
             )
             session.add(new_entity)
-            session.flush()
-            entity["id"] = new_entity.id
-
-        entities_by_context = {}
-        for entity in entities:
-            entities_by_context.setdefault(entity["context"], []).append(entity)
-
-        for entity_list in entities_by_context.values():
-            if len(entity_list) < 2:
-                continue
-
-            for i in range(len(entity_list)):
-                for j in range(i + 1, len(entity_list)):
-                    entity1 = entity_list[i]
-                    entity2 = entity_list[j]
-
-                    new_rel = Relationships(
-                        source_entity_id=entity1["id"],
-                        target_entity_id=entity2["id"],
-                        relationship_type="CO_OCCURRED_IN_SENTENCE",
-                        confidence_score=90,
-                    )
-                    session.add(new_rel)
-                    print(f"   -> Relationship created between {entity1['value']} and {entity2['value']}")
 
         session.commit()
-        print(f"--- SUCCESS: Analysis results saved for Evidence ID {evidence_id} to the database. ---")
-    except Exception as exc:
-        if hasattr(session, "rollback"):
-            session.rollback()
-        print(f"--- DATABASE ERROR: Failed to save analysis for {evidence_id}: {exc} ---")
+    except Exception:
+        session.rollback()
+        raise
     finally:
-        if hasattr(session, "close"):
-            session.close()
+        session.close()
 
 
 def process_evidence_task(evidence_id: str):
@@ -182,10 +197,14 @@ def process_evidence_task(evidence_id: str):
         print(f"[WORKER FAIL] OCR failed for {evidence_id}. Stopping pipeline.")
         return
 
-    print("Step 3: Analyzing text for entities...")
-    extracted_data = perform_nlp_analysis(raw_text, evidence_id)
+    print("Step 3: Sending extracted text to the AI service...")
+    extracted_data = analyze_with_ai_service(
+        raw_text=raw_text,
+        evidence_id=evidence_id,
+        source_filename=os.path.basename(storage_path),
+    )
     if not extracted_data:
-        print(f"[WORKER FAIL] NLP analysis yielded no results for {evidence_id}.")
+        print(f"[WORKER FAIL] AI service returned no entities for {evidence_id}.")
         return
 
     print("Step 4: Saving analysis results to the database...")
