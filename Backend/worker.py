@@ -37,6 +37,7 @@ else:
 
 
 def perform_ocr(image_path: str) -> str:
+    """Use Tesseract to extract text from an image."""
     print(f"-> OCR: Starting OCR on {image_path}...")
 
     if pytesseract is None or Image is None:
@@ -61,6 +62,7 @@ def perform_ocr(image_path: str) -> str:
 
 
 def perform_nlp_analysis(raw_text: str, evidence_id: str):
+    """Analyze OCR text with spaCy and return relevant extracted entities."""
     if nlp is None:
         print("NLP Analysis skipped because the spaCy model failed to load.")
         return []
@@ -92,6 +94,7 @@ def perform_nlp_analysis(raw_text: str, evidence_id: str):
 
 
 def save_analysis_to_db(evidence_id: str, entities: list):
+    """Persist extracted entities and sentence-based relationships."""
     if SessionLocal is None or ExtractedEntity is None or Relationships is None:
         print("--- DATABASE WARNING: Database models/session are unavailable. Skipping persistence. ---")
         return
@@ -143,6 +146,7 @@ def save_analysis_to_db(evidence_id: str, entities: list):
 
 
 def process_evidence_task(evidence_id: str):
+    """Fetch evidence metadata, OCR the file, analyze text, and save results."""
     print(f"\n[WORKER START] Starting processing for Evidence ID: {evidence_id}")
 
     if SessionLocal is None or EvidenceFile is None:

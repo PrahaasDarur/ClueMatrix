@@ -1,7 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON
 from sqlalchemy.ext.declarative import declarative_base
 
-# Initialize the Base class that all our models will inherit from
 Base = declarative_base()
 
 class EvidenceFile(Base):
@@ -15,7 +14,6 @@ class EvidenceFile(Base):
     upload_date = Column(DateTime, default=datetime.utcnow)
     status = Column(String, default="RECEIVED")         # e.g., RECEIVED, PROCESSING, COMPLETE, FAILED
 
-    # Relationships (Back-references)
     entities = relationship("ExtractedEntity", back_populates="evidence_file")
     timeline = relationship("IncidentTimeline", back_populates="evidence_file")
 
@@ -46,7 +44,6 @@ class Relationships(Base):
     source_entity = relationship("ExtractedEntity", foreign_keys=[source_entity_id], back_populates="relationships")
     target_entity = relationship("ExtractedEntity", foreign_keys=[target_entity_id], back_populates="relationships")
 
-# --- Initialization Function ---
 def init_db():
     """Creates all tables in the database."""
     Base.metadata.create_all(bind=engine)
