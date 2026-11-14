@@ -1,24 +1,32 @@
-import os
+﻿import os
 import shutil
 import uuid
 
-import spacy
-from fastapi import (
-    BackgroundTasks,
-    Depends,
-    FastAPI,
-    File,
-    HTTPException,
-    UploadFile,
-)
+# --------------------
+# NLP MODEL
+# --------------------
+try:
+    import spacy
+except ImportError:
+    spacy = None
+
+from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from database.models import EvidenceFile
 from database.session import SessionLocal
 from worker import process_evidence_task
 
-# Load the NLP model once when the API starts.
-nlp = spacy.load("en_core_web_sm")
+if spacy is not None:
+    try:
+        nlp = spacy.load("en_core_web_sm")
+        print("spaCy model loaded successfully.")
+    except OSError:
+        nlp = None
+        print("spaCy model 'en_core_web_sm' is not installed.")
+else:
+    nlp = None
+    print("spaCy is not installed.")
 
 NER_LABELS = {
     "PERSON",
@@ -43,6 +51,9 @@ app = FastAPI(
 )
 
 
+# --------------------
+# FILE HANDLING
+# --------------------
 def determine_file_type(filename: str) -> str:
     """Determine the file type based on the extension."""
     ext = os.path.splitext(filename)[1].lower()
@@ -68,11 +79,17 @@ def save_file_to_storage(file: UploadFile, file_id: str) -> str:
     return os.path.abspath(file_path)
 
 
+# --------------------
+# AUTH / QUEUE
+# --------------------
 def get_current_user() -> int:
     """Placeholder dependency for user authentication."""
     return 1
 
 
+# --------------------
+# API ENDPOINTS
+# --------------------
 @app.post("/api/evidence/upload", status_code=202)
 async def upload_evidence(
     background_tasks: BackgroundTasks,
@@ -80,18 +97,11 @@ async def upload_evidence(
     user_id: int = Depends(get_current_user),
 ):
     if not file.filename:
-        raise HTTPException(
-            status_code=400,
-            detail="No file provided.",
-        )
+        raise HTTPException(status_code=400, detail="No file provided.")
 
     file_type = determine_file_type(file.filename)
-
-    if file_type not in {"image", "pdf"}:
-        raise HTTPException(
-            status_code=415,
-            detail="Only JPG, JPEG, PNG and PDF files are supported.",
-        )
+    if file_type not in {"image", "pdf", "text"}:
+        raise HTTPException(status_code=415, detail="Only JPG, JPEG, PNG, PDF and TXT files are supported.")
 
     evidence_id = str(uuid.uuid4())
     storage_path = None
@@ -111,10 +121,7 @@ async def upload_evidence(
         db.add(new_evidence)
         db.commit()
 
-        background_tasks.add_task(
-            process_evidence_task,
-            evidence_id,
-        )
+        background_tasks.add_task(process_evidence_task, evidence_id)
 
         return {
             "message": "Evidence received and processing scheduled.",
@@ -122,18 +129,11 @@ async def upload_evidence(
             "file_type": file_type,
             "status": "RECEIVED",
         }
-
     except Exception as exc:
         db.rollback()
-
         if storage_path and os.path.isfile(storage_path):
             os.remove(storage_path)
-
-        raise HTTPException(
-            status_code=500,
-            detail=f"Evidence upload failed: {str(exc)}",
-        )
-
+        raise HTTPException(status_code=500, detail=f"Evidence upload failed: {str(exc)}")
     finally:
         db.close()
 
@@ -145,7 +145,9 @@ def read_root():
 
 @app.post("/analyze/ner")
 async def analyze_ner(request: EntityRequest):
-    """Extract named entities from evidence text."""
+    if nlp is None:
+        raise HTTPException(status_code=500, detail="spaCy model is not available.")
+
     doc = nlp(request.text)
     extracted_entities = []
 
