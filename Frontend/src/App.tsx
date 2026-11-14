@@ -4,6 +4,7 @@ import { useState } from "react";
 import Sidebar from "./components/layout/Sidebar";
 import Topbar from "./components/layout/Topbar";
 import Dashboard from "./pages/Dashboard";
+import Login, { type UserRole } from "./pages/Login";
 
 import {
   FolderSearch,
@@ -24,6 +25,8 @@ type Page =
   | "connections"
   | "integrity"
   | "reports";
+
+type View = "home" | "login" | "workspace";
 
 const pageTitles: Record<Page, string> = {
   dashboard: "Overview",
@@ -76,15 +79,16 @@ const pageDetails = {
 
 export default function App() {
   const [activePage, setActivePage] = useState<Page>("dashboard");
-  const [showHome, setShowHome] = useState(true);
+  const [activeView, setActiveView] = useState<View>("home");
+  const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [navigationHistory, setNavigationHistory] = useState<
-    Array<{ isHome: boolean; page: Page }>
+    Array<{ view: View; page: Page }>
   >([]);
 
-  function navigateTo(isHome: boolean, page = activePage) {
-    setNavigationHistory((history) => [...history, { isHome: showHome, page: activePage }]);
-    setShowHome(isHome);
+  function navigateTo(view: View, page = activePage) {
+    setNavigationHistory((history) => [...history, { view: activeView, page: activePage }]);
+    setActiveView(view);
     setActivePage(page);
   }
 
@@ -95,11 +99,11 @@ export default function App() {
     }
 
     setNavigationHistory((history) => history.slice(0, -1));
-    setShowHome(previousLocation.isHome);
+    setActiveView(previousLocation.view);
     setActivePage(previousLocation.page);
   }
 
-  if (showHome) {
+  if (activeView === "home") {
     return (
       <main className="landing-page page-slide-in">
         <div className="landing-background" aria-hidden="true">
@@ -115,13 +119,28 @@ export default function App() {
           </h1>
           <button
             className="landing-enter"
-            onClick={() => navigateTo(false)}
+            onClick={() => navigateTo("login")}
           >
-            Enter workspace
+            Get started
             <span aria-hidden="true">→</span>
           </button>
         </section>
       </main>
+    );
+  }
+
+  if (activeView === "login") {
+    return (
+      <Login
+        selectedRole={selectedRole}
+        onRoleSelect={setSelectedRole}
+        onContinue={() => {
+          if (selectedRole) {
+            navigateTo("workspace", "dashboard");
+          }
+        }}
+        onBack={() => navigateTo("home")}
+      />
     );
   }
 
@@ -156,7 +175,7 @@ export default function App() {
         activePage={activePage}
         onNavigate={(page) => {
           if (page !== activePage) {
-            navigateTo(false, page);
+            navigateTo("workspace", page);
           }
         }}
         isOpen={sidebarOpen}
@@ -167,9 +186,10 @@ export default function App() {
 
         <Topbar
           pageTitle={pageTitles[activePage]}
+          currentRole={selectedRole}
           onMenuClick={() => setSidebarOpen(true)}
           onBackClick={goBack}
-          onHomeClick={() => navigateTo(true)}
+          onHomeClick={() => navigateTo("home")}
         />
 
         <div

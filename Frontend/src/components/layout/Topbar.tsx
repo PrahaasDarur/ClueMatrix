@@ -7,9 +7,11 @@ import {
   ChevronRight,
   Home,
 } from "lucide-react";
+import type { UserRole } from "../../pages/Login";
 
 interface TopbarProps {
   pageTitle: string;
+  currentRole: UserRole | null;
   onMenuClick: () => void;
   onBackClick: () => void;
   onHomeClick: () => void;
@@ -17,6 +19,7 @@ interface TopbarProps {
 
 export default function Topbar({
   pageTitle,
+  currentRole,
   onMenuClick,
   onBackClick,
   onHomeClick,
@@ -85,7 +88,7 @@ export default function Topbar({
 
           <div className="profile-info">
             <strong>Workspace User</strong>
-            <span>Administrator</span>
+            <span>{currentRole ?? "Workspace"}</span>
           </div>
         </div>
       </div>

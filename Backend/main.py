@@ -2,7 +2,9 @@ import os
 import shutil
 import uuid
 
+import spacy
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from pydantic import BaseModel
 
 try:
     from database.session import SessionLocal
@@ -10,6 +12,26 @@ try:
 except ImportError:
     SessionLocal = None
     EvidenceFile = None
+
+# Load the NLP model once when the API starts.
+nlp = spacy.load("en_core_web_sm")
+
+NER_LABELS = {
+    "PERSON",
+    "ORG",
+    "GPE",
+    "LOC",
+    "FAC",
+    "DATE",
+}
+
+
+class EntityRequest(BaseModel):
+    text: str
+    evidence_id: str
+    source_filename: str | None = None
+    page_number: int | None = None
+
 
 app = FastAPI(
     title="Digital Evidence Intelligence API (Phase 1)",
@@ -96,3 +118,44 @@ async def upload_evidence(
 @app.get("/")
 def read_root():
     return {"status": "API is running", "service": "Evidence Intelligence Platform - Phase 1"}
+
+
+@app.post("/analyze/ner")
+async def analyze_ner(request: EntityRequest):
+    """Extract named entities from evidence text."""
+    doc = nlp(request.text)
+    extracted_entities = []
+
+    for entity in doc.ents:
+        if entity.label_ not in NER_LABELS:
+            continue
+
+        extracted_entities.append(
+            {
+                "type": entity.label_,
+                "value": entity.text,
+                "start": entity.start_char,
+                "end": entity.end_char,
+                "evidence_id": request.evidence_id,
+                "source_filename": request.source_filename,
+                "page_number": request.page_number,
+                "method": "spaCy NER",
+            }
+        )
+
+    entity_counts = {}
+    for entity in extracted_entities:
+        entity_type = entity["type"]
+        entity_counts[entity_type] = entity_counts.get(entity_type, 0) + 1
+
+    return {
+        "evidence_id": request.evidence_id,
+        "source_filename": request.source_filename,
+        "total_entities": len(extracted_entities),
+        "entity_counts": entity_counts,
+        "entities": extracted_entities,
+        "processing": {
+            "method": "spaCy en_core_web_sm",
+            "status": "completed",
+        },
+    }
