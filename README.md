@@ -32,7 +32,22 @@ Before you begin setup, ensure you have the following installed on your machine:
 
 Follow these steps precisely to get the backend running:
 
-**Step 1: Clone the Repository**
+Step 1: Clone the Repository
 Clone this repository to your local machine:
-```bash
+```basht
 
+Step 2: Setup the Environment
+python -m venv venv
+.\venv\Scripts\activate  # (Use the correct command for your OS)
+
+Step 3: Install Dependencies
+Install all required Python packages from the requirements file:
+pip install -r requirements.txt
+
+Step 4: Configure the Database
+
+Edit database/session.py and change the DATABASE_URL string to match your actual PostgreSQL credentials (user, password, database name).
+
+Step 5: Run the Server (The Backend)
+Run the server in a separate terminal window:
+uvicorn main:app --reload
