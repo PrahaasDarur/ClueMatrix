@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { isAxiosError } from "axios";
 import {
   ArrowLeft,
   FolderSearch,
@@ -16,6 +17,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import AnalysisPanel from "../components/analysis/AnalysisPanel";
+import { uploadEvidence } from "../services/evidenceService";
 import type { Investigation } from "./Investigations";
 
 interface InvestigationDetailProps {
@@ -47,6 +49,14 @@ function getFileIcon(type: string) {
   return FileText;
 }
 
+function getUploadErrorMessage(error: unknown) {
+  if (isAxiosError<{ detail?: string }>(error)) {
+    return error.response?.data?.detail ?? error.message;
+  }
+
+  return error instanceof Error ? error.message : "Unknown upload error.";
+}
+
 export default function InvestigationDetail({
   investigation,
   onBack,
@@ -57,39 +67,58 @@ export default function InvestigationDetail({
   const [error, setError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  async function handleFiles(files) {
-    if (!files || files.length === 0) {
-        console.log("No file selected.");
-        return;
-    }
+  async function handleFiles(files: FileList | null) {
+    if (!files || files.length === 0) return;
 
-    const file = files[0]; // We only handle the first file for this MVP
-    
-    const apiUrl = 'http://127.0.0.1:8000/api/evidence/upload';
-
-    const formData = new FormData();
-    formData.append('file', file); // 'file' MUST match what main.py expects!
+    setError("");
+    setIsProcessing(true);
+    const failures: string[] = [];
 
     try {
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            body: formData // Send the file using FormData
-        });
-
-        if (response.ok) { // Checks for status 200-299
-            const data = await response.json();
-            console.log("✅ Server Success:", data);
-            // Here, you would update the state to show "Job Queued"
-        } else {
-            const errorData = await response.json();
-            console.error("❌ Server Error:", errorData);
+      for (const file of Array.from(files)) {
+        if (!/\.(jpe?g|png|pdf)$/i.test(file.name)) {
+          failures.push(
+            `${file.name}: only JPG, JPEG, PNG, and PDF files are supported.`,
+          );
+          continue;
         }
 
-    } catch (error) {
-        console.error("Network or Fetch Error:", error);
-        // Handle network failures here
+        try {
+          const buffer = await file.arrayBuffer();
+          const digest = await crypto.subtle.digest("SHA-256", buffer);
+
+          const hash = Array.from(new Uint8Array(digest))
+            .map((byte) => byte.toString(16).padStart(2, "0"))
+            .join("");
+
+          const result = await uploadEvidence(file);
+
+          setEvidence((current) => [
+            {
+              id: result.evidence_id,
+              name: file.name,
+              size: file.size,
+              type: file.type || "Unknown file type",
+              hash,
+              addedAt: new Date().toLocaleString(),
+            },
+            ...current,
+          ]);
+        } catch (uploadError) {
+          failures.push(
+            `${file.name}: ${getUploadErrorMessage(uploadError)}`,
+          );
+        }
+      }
+
+      if (failures.length > 0) {
+        setError(`Some files could not be uploaded. ${failures.join(" ")}`);
+      }
+    } finally {
+      setIsProcessing(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
-}
+  }
 
   const tabs = [
     { id: "evidence", label: "Evidence", icon: Files },
@@ -171,7 +200,8 @@ export default function InvestigationDetail({
             <div>
               <h2>Evidence Vault</h2>
               <p>
-                Register files and calculate their SHA-256 fingerprints.
+                Upload JPG, JPEG, PNG, or PDF evidence and calculate its
+                SHA-256 fingerprint.
               </p>
             </div>
 
@@ -190,6 +220,7 @@ export default function InvestigationDetail({
               multiple
               hidden
               onChange={(event) => handleFiles(event.target.files)}
+              accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
             />
           </div>
 
@@ -198,8 +229,9 @@ export default function InvestigationDetail({
             <div>
               <strong>SHA-256 fingerprinting</strong>
               <p>
-                Each selected file is hashed locally in your browser. The
-                fingerprint can help detect whether the file changes later.
+                Each file is hashed in your browser and uploaded to the
+                backend for processing. The fingerprint can help detect
+                whether the file changes later.
               </p>
             </div>
           </div>
@@ -218,7 +250,7 @@ export default function InvestigationDetail({
               </div>
               <h3>No new evidence registered in this session</h3>
               <p>
-                Add screenshots, documents, audio, or other files to calculate
+                Add JPG, JPEG, PNG, or PDF files to upload them and calculate
                 their SHA-256 fingerprints.
               </p>
               <button
@@ -253,7 +285,7 @@ export default function InvestigationDetail({
 
                     <div className="hash-verified">
                       <CheckCircle2 size={17} />
-                      <span>Hash calculated</span>
+                      <span>Uploaded</span>
                     </div>
                   </article>
                 );
@@ -262,9 +294,9 @@ export default function InvestigationDetail({
           )}
 
           <p className="evidence-disclaimer">
-            Session-only demonstration: files are not uploaded or persistently
-            stored. A calculated hash is not proof of authenticity or
-            chain-of-custody compliance.
+            Uploaded files are stored by the backend and queued for analysis.
+            A calculated hash is not proof of authenticity or chain-of-custody
+            compliance.
           </p>
         </div>
       )}

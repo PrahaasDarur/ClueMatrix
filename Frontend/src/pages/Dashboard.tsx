@@ -1,338 +1,143 @@
-
 import {
-  FolderOpen,
+  FolderSearch,
   Files,
-  Clock3,
-  ShieldCheck,
-  ArrowUpRight,
-  Plus,
-  FileSearch,
   BrainCircuit,
-  Network,
+  Clock3,
+  ArrowUpRight,
+  ShieldCheck,
   Activity,
-  MoreHorizontal,
+  Plus,
+  FileText,
 } from "lucide-react";
 
-const statistics = [
-  {
-    label: "Active Investigations",
-    value: "03",
-    description: "Across your workspace",
-    icon: FolderOpen,
-    color: "blue",
-  },
-  {
-    label: "Evidence Files",
-    value: "16",
-    description: "Registered in demo data",
-    icon: Files,
-    color: "cyan",
-  },
-  {
-    label: "Timeline Events",
-    value: "12",
-    description: "Illustrative extracted events",
-    icon: Clock3,
-    color: "purple",
-  },
-  {
-    label: "Integrity Checks",
-    value: "16",
-    description: "Illustrative verification count",
-    icon: ShieldCheck,
-    color: "green",
-  },
+const stats = [
+  { label: "Investigations", value: "08", change: "Active workspaces", icon: FolderSearch },
+  { label: "Evidence files", value: "24", change: "Across investigations", icon: Files },
+  { label: "Entities extracted", value: "156", change: "Sample analysis data", icon: BrainCircuit },
+  { label: "Integrity checks", value: "24", change: "Fingerprints calculated", icon: ShieldCheck },
 ];
 
 const investigations = [
-  {
-    id: "CM-024",
-    name: "Social Platform Harassment",
-    category: "Online Harassment",
-    evidence: 8,
-    status: "Analysis Complete",
-    statusType: "completed",
-    updated: "Today, 10:42 AM",
-  },
-  {
-    id: "CM-023",
-    name: "Payment Impersonation",
-    category: "Fraud",
-    evidence: 5,
-    status: "In Review",
-    statusType: "review",
-    updated: "Yesterday",
-  },
-  {
-    id: "CM-021",
-    name: "Repeated Contact Pattern",
-    category: "Stalking",
-    evidence: 3,
-    status: "Evidence Collected",
-    statusType: "collected",
-    updated: "Nov 11, 2026",
-  },
+  { id: "INV-001", name: "Online Harassment Case", category: "Cyber Harassment", evidence: 8, status: "Active" },
+  { id: "INV-002", name: "Financial Fraud Investigation", category: "Financial Fraud", evidence: 6, status: "Processing" },
+  { id: "INV-003", name: "Digital Identity Theft", category: "Identity Theft", evidence: 5, status: "Active" },
 ];
 
 const activities = [
-  {
-    title: "Evidence registered",
-    description: "message-thread-01.png",
-    time: "Today · 10:42 AM",
-    icon: Files,
-  },
-  {
-    title: "Investigation created",
-    description: "CM-024 · Social Platform Harassment",
-    time: "Today · 10:35 AM",
-    icon: FolderOpen,
-  },
-  {
-    title: "Integrity fingerprint calculated",
-    description: "SHA-256 · Demo evidence",
-    time: "Today · 10:30 AM",
-    icon: ShieldCheck,
-  },
-];
-
-const features = [
-  {
-    number: "01",
-    title: "Smart Evidence Extraction",
-    description:
-      "Extract important information from screenshots, documents, emails, and other digital files.",
-    icon: FileSearch,
-    color: "blue",
-  },
-  {
-    number: "02",
-    title: "Intelligent Timeline & Mapping",
-    description:
-      "Connect related clues, identify contextual relationships, and reconstruct incident events.",
-    icon: Network,
-    color: "cyan",
-  },
-  {
-    number: "03",
-    title: "Evidence Integrity Verification",
-    description:
-      "Use SHA-256 fingerprints to detect changes to evidence files.",
-    icon: ShieldCheck,
-    color: "green",
-  },
+  { title: "Evidence uploaded", description: "email_export.pdf", time: "Today · 09:30 AM", icon: Files },
+  { title: "Analysis completed", description: "Entity extraction finished", time: "Today · 10:15 AM", icon: BrainCircuit },
+  { title: "Fingerprint calculated", description: "chat_screenshot.png", time: "Yesterday · 04:20 PM", icon: ShieldCheck },
+  { title: "Investigation created", description: "Online Harassment Case", time: "Yesterday · 11:00 AM", icon: FolderSearch },
 ];
 
 export default function Dashboard() {
   return (
-    <div className="dashboard">
-
-      {/* PAGE HEADING */}
-
-      <section className="dashboard-heading">
+    <section className="dashboard-page">
+      <div className="dashboard-heading">
         <div>
-          <p className="eyebrow">INTELLIGENCE WORKSPACE</p>
-
-          <h1>Evidence, connected.</h1>
-
-          <p className="heading-description">
-            Organize digital evidence, connect clues, and
-            reconstruct incident sequences.
-          </p>
+          <span className="eyebrow">WORKSPACE OVERVIEW</span>
+          <h1>Good to see you again.</h1>
+          <p>Monitor investigations, evidence and intelligence activity.</p>
         </div>
-
-        <button className="primary-button">
-          <Plus size={18} />
-          New Investigation
-        </button>
-      </section>
-
-      {/* STATISTICS */}
-
-      <section className="statistics-grid">
-
-        {statistics.map((stat) => {
-          const Icon = stat.icon;
-
-          return (
-            <div className="stat-card" key={stat.label}>
-
-              <div className="stat-card-top">
-                <span>{stat.label}</span>
-
-                <div className={`stat-icon ${stat.color}`}>
-                  <Icon size={19} />
-                </div>
-              </div>
-
-              <h2>{stat.value}</h2>
-
-              <p>{stat.description}</p>
-
-            </div>
-          );
-        })}
-
-      </section>
-
-      {/* MAIN CONTENT */}
-
-      <section className="dashboard-main-grid">
-
-        {/* RECENT INVESTIGATIONS */}
-
-        <div className="dashboard-panel">
-
-          <div className="panel-heading">
-            <div>
-              <h2>Recent Investigations</h2>
-              <p>Your latest investigation workspaces</p>
-            </div>
-
-            <button className="icon-button" aria-label="More options">
-              <MoreHorizontal size={20} />
-            </button>
-          </div>
-
-          <div className="investigation-list">
-
-            {investigations.map((item) => (
-
-              <div className="investigation-row" key={item.id}>
-
-                <div className="investigation-main">
-
-                  <div className="investigation-icon">
-                    <FolderOpen size={19} />
-                  </div>
-
-                  <div>
-                    <h3>{item.name}</h3>
-
-                    <p>
-                      {item.id}
-                      <span>·</span>
-                      {item.category}
-                    </p>
-
-                    <small>
-                      {item.evidence} evidence files · {item.updated}
-                    </small>
-                  </div>
-
-                </div>
-
-                <span className={`status-badge ${item.statusType}`}>
-                  {item.status}
-                </span>
-
-              </div>
-
-            ))}
-
-          </div>
-
-          <button className="text-button">
-            View all investigations
-            <ArrowUpRight size={15} />
-          </button>
-
-        </div>
-
-        {/* RECENT ACTIVITY */}
-
-        <div className="dashboard-panel">
-
-          <div className="panel-heading">
-            <div>
-              <h2>Recent Activity</h2>
-              <p>Latest workspace actions</p>
-            </div>
-
-            <Activity size={19} className="muted-icon" />
-          </div>
-
-          <div className="activity-list">
-
-            {activities.map((activity, index) => {
-              const Icon = activity.icon;
-
-              return (
-                <div className="activity-item" key={index}>
-
-                  <div className="activity-icon">
-                    <Icon size={17} />
-                  </div>
-
-                  <div>
-                    <h3>{activity.title}</h3>
-                    <p>{activity.description}</p>
-                    <small>{activity.time}</small>
-                  </div>
-
-                </div>
-              );
-            })}
-
-          </div>
-
-        </div>
-
-      </section>
-
-      {/* CORE FEATURES */}
-
-      <section className="features-section">
-
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">PLATFORM CAPABILITIES</p>
-            <h2>Digital evidence intelligence</h2>
-          </div>
-        </div>
-
-        <div className="features-grid">
-
-          {features.map((feature) => {
-            const Icon = feature.icon;
-
-            return (
-              <div className="feature-card" key={feature.number}>
-
-                <div className="feature-card-top">
-
-                  <div className={`feature-icon ${feature.color}`}>
-                    <Icon size={22} />
-                  </div>
-
-                  <span>{feature.number}</span>
-
-                </div>
-
-                <h3>{feature.title}</h3>
-
-                <p>{feature.description}</p>
-
-              </div>
-            );
-          })}
-
-        </div>
-
-      </section>
-
-      {/* DEMO DATA DISCLAIMER */}
-
-      <div className="demo-notice">
-        <BrainCircuit size={17} />
-
-        <p>
-          Demonstration workspace — statistics, activity, and
-          investigation records currently use synthetic data.
-          AI findings require verification against original evidence.
-        </p>
-
+        <span className="dashboard-live"><Activity size={15} /> Workspace overview</span>
       </div>
 
-    </div>
+      <div className="dashboard-stats">
+        {stats.map((stat) => {
+          const Icon = stat.icon;
+          return (
+            <article className="dashboard-stat-card" key={stat.label}>
+              <div className="dashboard-stat-top">
+                <span>{stat.label}</span>
+                <Icon size={20} />
+              </div>
+              <strong>{stat.value}</strong>
+              <small>{stat.change}</small>
+            </article>
+          );
+        })}
+      </div>
+
+      <div className="dashboard-grid">
+        <section className="dashboard-panel dashboard-investigations">
+          <div className="dashboard-panel-heading">
+            <div>
+              <h2>Recent investigations</h2>
+              <p>Your latest investigation workspaces</p>
+            </div>
+            <FolderSearch size={21} />
+          </div>
+
+          {investigations.map((item) => (
+            <article className="dashboard-investigation" key={item.id}>
+              <div className="dashboard-investigation-icon">
+                <FolderSearch size={19} />
+              </div>
+              <div className="dashboard-investigation-info">
+                <strong>{item.name}</strong>
+                <span>{item.id} · {item.category}</span>
+                <small>{item.evidence} evidence files</small>
+              </div>
+              <span className={`status-pill ${item.status.toLowerCase()}`}>
+                {item.status}
+              </span>
+            </article>
+          ))}
+
+          <p className="evidence-disclaimer">
+            Demonstration records. Connect the investigations API for live data.
+          </p>
+        </section>
+
+        <section className="dashboard-panel">
+          <div className="dashboard-panel-heading">
+            <div>
+              <h2>Recent activity</h2>
+              <p>Latest workspace events</p>
+            </div>
+            <Clock3 size={21} />
+          </div>
+
+          <div className="dashboard-activity-list">
+            {activities.map((activity, index) => {
+              const Icon = activity.icon;
+              return (
+                <article className="dashboard-activity" key={index}>
+                  <div className="dashboard-activity-icon">
+                    <Icon size={17} />
+                  </div>
+                  <div>
+                    <strong>{activity.title}</strong>
+                    <span>{activity.description}</span>
+                    <small>{activity.time}</small>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      </div>
+
+      <section className="dashboard-panel dashboard-quick-actions">
+        <div className="dashboard-panel-heading">
+          <div>
+            <h2>Workspace capabilities</h2>
+            <p>Core ClueMatrix modules</p>
+          </div>
+          <ArrowUpRight size={21} />
+        </div>
+
+        <div className="dashboard-action-grid">
+          <article><Plus size={20} /><strong>Investigations</strong><span>Create and organize cases</span></article>
+          <article><Files size={20} /><strong>Evidence Vault</strong><span>Upload and manage evidence</span></article>
+          <article><BrainCircuit size={20} /><strong>AI Intelligence</strong><span>Extract entities and insights</span></article>
+          <article><FileText size={20} /><strong>Reports</strong><span>Prepare incident summaries</span></article>
+        </div>
+      </section>
+
+      <p className="evidence-disclaimer">
+        Dashboard statistics and activity are currently sample data and are not live backend metrics.
+      </p>
+    </section>
   );
 }
