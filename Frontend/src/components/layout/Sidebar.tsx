@@ -20,7 +20,8 @@ type Page =
   | "timeline"
   | "connections"
   | "integrity"
-  | "reports";
+  | "reports"
+  | "settings";
 
 interface SidebarProps {
   activePage: Page;
@@ -52,6 +53,10 @@ const navigationItems = [
       { id: "integrity", label: "Integrity & Audit", icon: ShieldCheck },
       { id: "reports", label: "Reports", icon: FileText },
     ],
+  },
+  {
+    section: "SETTINGS",
+    items: [{ id: "settings", label: "Settings", icon: Settings }],
   },
 ] as const;
 
@@ -109,11 +114,6 @@ export default function Sidebar({
         </div>
 
         <div className="sidebar-footer">
-          <button className="nav-item settings-item">
-            <Settings size={19} strokeWidth={1.8} />
-            <span>Settings</span>
-          </button>
-
           <div className="workspace-status">
             <span className="status-indicator" />
             <div>

@@ -1,20 +1,21 @@
-import Investigations from "./pages/Investigations";
 import { useState } from "react";
 
 import Sidebar from "./components/layout/Sidebar";
 import Topbar from "./components/layout/Topbar";
+import EvidenceVault from "./components/evidence/EvidenceVault";
 import Dashboard from "./pages/Dashboard";
+import Investigations from "./pages/Investigations";
 import Login, { type UserRole } from "./pages/Login";
-
 import {
-  FolderSearch,
-  Files,
-  BrainCircuit,
-  Clock3,
-  Network,
-  ShieldCheck,
-  FileText,
-} from "lucide-react";
+  AnalysisPage,
+  ConnectionsPage,
+  TimelinePage,
+} from "./pages/IntelligencePages";
+import {
+  IntegrityPage,
+  ReportsPage,
+  SettingsPage,
+} from "./pages/GovernancePages";
 
 type Page =
   | "dashboard"
@@ -24,7 +25,8 @@ type Page =
   | "timeline"
   | "connections"
   | "integrity"
-  | "reports";
+  | "reports"
+  | "settings";
 
 type View = "home" | "login" | "workspace";
 
@@ -37,44 +39,7 @@ const pageTitles: Record<Page, string> = {
   connections: "Connections",
   integrity: "Integrity & Audit",
   reports: "Reports",
-};
-
-const pageDetails = {
-  investigations: {
-    icon: FolderSearch,
-    title: "Investigations",
-    description: "Create and manage your digital incident workspaces.",
-  },
-  evidence: {
-    icon: Files,
-    title: "Evidence Vault",
-    description: "Upload and organize screenshots, emails, documents, and other evidence.",
-  },
-  analysis: {
-    icon: BrainCircuit,
-    title: "AI Analysis",
-    description: "Extract entities, information, and contextual relationships from evidence.",
-  },
-  timeline: {
-    icon: Clock3,
-    title: "Incident Timeline",
-    description: "Reconstruct chronological incident sequences using source-linked events.",
-  },
-  connections: {
-    icon: Network,
-    title: "Connections",
-    description: "Visualize relationships between people, conversations, and events.",
-  },
-  integrity: {
-    icon: ShieldCheck,
-    title: "Integrity & Audit",
-    description: "Review SHA-256 fingerprints and evidence activity records.",
-  },
-  reports: {
-    icon: FileText,
-    title: "Reports",
-    description: "Prepare structured incident summaries with supporting evidence references.",
-  },
+  settings: "Settings",
 };
 
 export default function App() {
@@ -86,21 +51,24 @@ export default function App() {
     Array<{ view: View; page: Page }>
   >([]);
 
-  function navigateTo(view: View, page = activePage) {
-    setNavigationHistory((history) => [...history, { view: activeView, page: activePage }]);
+  function navigateTo(view: View, page: Page = activePage) {
+    setNavigationHistory((history) => [
+      ...history,
+      { view: activeView, page: activePage },
+    ]);
     setActiveView(view);
     setActivePage(page);
+    setSidebarOpen(false);
   }
 
   function goBack() {
-    const previousLocation = navigationHistory[navigationHistory.length - 1];
-    if (!previousLocation) {
-      return;
-    }
+    const previous = navigationHistory[navigationHistory.length - 1];
+
+    if (!previous) return;
 
     setNavigationHistory((history) => history.slice(0, -1));
-    setActiveView(previousLocation.view);
-    setActivePage(previousLocation.page);
+    setActiveView(previous.view);
+    setActivePage(previous.page);
   }
 
   if (activeView === "home") {
@@ -117,12 +85,12 @@ export default function App() {
           <h1 className="landing-title">
             Clue<span>Matrix</span>
           </h1>
+
           <button
             className="landing-enter"
             onClick={() => navigateTo("login")}
           >
-            Get started
-            <span aria-hidden="true">→</span>
+            Get started <span aria-hidden="true">→</span>
           </button>
         </section>
       </main>
@@ -135,42 +103,42 @@ export default function App() {
         selectedRole={selectedRole}
         onRoleSelect={setSelectedRole}
         onContinue={() => {
-          if (selectedRole) {
-            navigateTo("workspace", "dashboard");
-          }
+          if (selectedRole) navigateTo("workspace", "dashboard");
         }}
         onBack={() => navigateTo("home")}
       />
     );
   }
 
-  const renderPage = () => {
-    if (activePage === "dashboard") {
-      return <Dashboard />;
+  function renderPage() {
+    switch (activePage) {
+      case "dashboard":
+        return <Dashboard />;
+      case "investigations":
+        return <Investigations />;
+      case "evidence":
+        return <EvidenceVault />;
+      case "analysis":
+        return <AnalysisPage />;
+      case "timeline":
+        return <TimelinePage />;
+      case "connections":
+        return <ConnectionsPage />;
+      case "integrity":
+        return <IntegrityPage />;
+      case "reports":
+        return <ReportsPage />;
+      case "settings":
+        return <SettingsPage />;
+      default: {
+        const exhaustiveCheck: never = activePage;
+        return exhaustiveCheck;
+      }
     }
-
-    if (activePage === "investigations") {
-      return <Investigations />;
-    }
-
-    const details = pageDetails[activePage];
-
-    return (
-      <div className="placeholder-page">
-        <div className="placeholder-icon">
-          <details.icon size={30} />
-        </div>
-        <span className="eyebrow">CLUE MATRIX WORKSPACE</span>
-        <h1>{details.title}</h1>
-        <p>{details.description}</p>
-        <div className="coming-soon">Module under development</div>
-      </div>
-    );
-  };
+  }
 
   return (
     <div className="app-layout page-slide-in">
-
       <Sidebar
         activePage={activePage}
         onNavigate={(page) => {
@@ -183,7 +151,6 @@ export default function App() {
       />
 
       <main className="main-content">
-
         <Topbar
           pageTitle={pageTitles[activePage]}
           currentRole={selectedRole}
@@ -192,15 +159,10 @@ export default function App() {
           onHomeClick={() => navigateTo("home")}
         />
 
-        <div
-          className="page-content page-slide-in"
-          key={activePage}
-        >
+        <div className="page-content page-slide-in" key={activePage}>
           {renderPage()}
         </div>
-
       </main>
-
     </div>
   );
 }

@@ -10,7 +10,8 @@ try:
 except ImportError:
     spacy = None
 
-from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from database.models import EvidenceFile
@@ -48,6 +49,17 @@ class EntityRequest(BaseModel):
 app = FastAPI(
     title="Digital Evidence Intelligence API (Phase 1)",
     description="API for secure evidence upload and queuing for analysis.",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -134,6 +146,44 @@ async def upload_evidence(
         if storage_path and os.path.isfile(storage_path):
             os.remove(storage_path)
         raise HTTPException(status_code=500, detail=f"Evidence upload failed: {str(exc)}")
+    finally:
+        db.close()
+
+
+@app.get("/api/evidence")
+def list_evidence(
+    limit: int = Query(default=100, ge=1, le=500),
+    user_id: int = Depends(get_current_user),
+):
+    db = SessionLocal()
+
+    try:
+        records = (
+            db.query(EvidenceFile)
+            .filter(EvidenceFile.user_id == user_id)
+            .order_by(EvidenceFile.upload_date.desc())
+            .limit(limit)
+            .all()
+        )
+
+        return {
+            "total": len(records),
+            "evidence": [
+                {
+                    "evidence_id": record.id,
+                    "filename": os.path.basename(record.storage_path),
+                    "file_type": record.file_type,
+                    "status": record.status,
+                    "upload_date": (
+                        record.upload_date.isoformat()
+                        if record.upload_date
+                        else None
+                    ),
+                }
+                for record in records
+            ],
+        }
+
     finally:
         db.close()
 
