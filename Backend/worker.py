@@ -1,11 +1,17 @@
 ﻿import os
 import uuid
 
+# --------------------
+# HTTP CLIENT
+# --------------------
 try:
     import httpx
 except ImportError:
     httpx = None
 
+# --------------------
+# OCR MODEL
+# --------------------
 try:
     import pytesseract
 except ImportError:
@@ -16,6 +22,9 @@ try:
 except ImportError:
     Image = None
 
+# --------------------
+# NLP MODEL
+# --------------------
 try:
     import spacy
 except ImportError:
@@ -26,6 +35,9 @@ try:
 except ImportError:
     pipeline = None
 
+# --------------------
+# DATABASE MODEL
+# --------------------
 try:
     from database.models import Base, EvidenceFile, ExtractedEntity
     from database.session import SessionLocal, engine
@@ -38,6 +50,9 @@ except ImportError:
 
 AI_SERVICE_URL = os.getenv("AI_SERVICE_URL", "http://127.0.0.1:8000")
 
+# --------------------
+# MODEL SETUP
+# --------------------
 spacy_nlp = None
 transformer_nlp = None
 
@@ -58,6 +73,9 @@ if pipeline is not None:
 nlp = spacy_nlp or transformer_nlp
 
 
+# --------------------
+# AI SERVICE
+# --------------------
 def analyze_with_ai_service(raw_text: str, evidence_id: str, source_filename: str) -> list:
     """Send extracted text to the AI service if it is available."""
     if httpx is None:
@@ -80,6 +98,9 @@ def analyze_with_ai_service(raw_text: str, evidence_id: str, source_filename: st
     return entities
 
 
+# --------------------
+# OCR SECTION
+# --------------------
 def perform_ocr(image_path: str) -> str:
     """Extract text from an image using Tesseract OCR."""
     print(f"OCR: Starting OCR on {image_path}...")
@@ -105,6 +126,9 @@ def perform_ocr(image_path: str) -> str:
         return ""
 
 
+# --------------------
+# NLP SECTION
+# --------------------
 def perform_nlp_analysis(raw_text: str, evidence_id: str):
     """Extract named entities from OCR text."""
     if nlp is None:
@@ -143,6 +167,9 @@ def perform_nlp_analysis(raw_text: str, evidence_id: str):
     return extracted_data
 
 
+# --------------------
+# DATABASE SECTION
+# --------------------
 def save_analysis_to_db(evidence_id: str, entities: list):
     """Persist entities to the database."""
     if SessionLocal is None or ExtractedEntity is None:
@@ -172,6 +199,9 @@ def save_analysis_to_db(evidence_id: str, entities: list):
         session.close()
 
 
+# --------------------
+# PIPELINE SECTION
+# --------------------
 def process_evidence_task(evidence_id: str):
     """Run the evidence-processing pipeline for one record."""
     if SessionLocal is None or EvidenceFile is None or Base is None or engine is None:

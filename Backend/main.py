@@ -2,6 +2,9 @@
 import shutil
 import uuid
 
+# --------------------
+# NLP MODEL
+# --------------------
 try:
     import spacy
 except ImportError:
@@ -48,6 +51,9 @@ app = FastAPI(
 )
 
 
+# --------------------
+# FILE HANDLING
+# --------------------
 def determine_file_type(filename: str) -> str:
     """Determine the file type based on the extension."""
     ext = os.path.splitext(filename)[1].lower()
@@ -73,11 +79,17 @@ def save_file_to_storage(file: UploadFile, file_id: str) -> str:
     return os.path.abspath(file_path)
 
 
+# --------------------
+# AUTH / QUEUE
+# --------------------
 def get_current_user() -> int:
     """Placeholder dependency for user authentication."""
     return 1
 
 
+# --------------------
+# API ENDPOINTS
+# --------------------
 @app.post("/api/evidence/upload", status_code=202)
 async def upload_evidence(
     background_tasks: BackgroundTasks,
