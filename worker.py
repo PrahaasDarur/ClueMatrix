@@ -1,4 +1,4 @@
-import os
+﻿import os
 import uuid
 
 try:
@@ -101,7 +101,6 @@ def save_analysis_to_db(evidence_id: str, entities: list):
 
     session = SessionLocal()
     try:
-        saved_entities = []
         for entity in entities:
             new_entity = ExtractedEntity(
                 evidence_file_id=evidence_id,
@@ -112,12 +111,10 @@ def save_analysis_to_db(evidence_id: str, entities: list):
             session.add(new_entity)
             session.flush()
             entity["id"] = new_entity.id
-            saved_entities.append(new_entity)
 
         entities_by_context = {}
         for entity in entities:
-            context = entity["context"]
-            entities_by_context.setdefault(context, []).append(entity)
+            entities_by_context.setdefault(entity["context"], []).append(entity)
 
         for entity_list in entities_by_context.values():
             if len(entity_list) < 2:
@@ -140,10 +137,12 @@ def save_analysis_to_db(evidence_id: str, entities: list):
         session.commit()
         print(f"--- SUCCESS: Analysis results saved for Evidence ID {evidence_id} to the database. ---")
     except Exception as exc:
-        session.rollback()
+        if hasattr(session, "rollback"):
+            session.rollback()
         print(f"--- DATABASE ERROR: Failed to save analysis for {evidence_id}: {exc} ---")
     finally:
-        session.close()
+        if hasattr(session, "close"):
+            session.close()
 
 
 def process_evidence_task(evidence_id: str):
