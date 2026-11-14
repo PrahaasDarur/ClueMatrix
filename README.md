@@ -1,3 +1,14 @@
+<img width="1600" height="774" alt="Parth BIT - 2026-11-14 14 21 45" src="https://github.com/user-attachments/assets/d6f2a372-9160-456d-8878-c5c983c86a40" />
+
+
+
+
+
+
+
+
+
+
 # ClueMatrix
 
 A comprehensive backend system designed to ingest, analyze, and structure digital evidence using AI (OCR, NLP) to identify connections and timelines.
