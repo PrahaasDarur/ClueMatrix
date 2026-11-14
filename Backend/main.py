@@ -1,4 +1,4 @@
-import os
+﻿import os
 import shutil
 import uuid
 
@@ -7,19 +7,13 @@ try:
 except ImportError:
     spacy = None
 
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
-try:
-    from database.session import SessionLocal
-    from database.models import EvidenceFile
-except ImportError:
-    SessionLocal = None
-    EvidenceFile = None
+from database.models import EvidenceFile
+from database.session import SessionLocal
+from worker import process_evidence_task
 
-# --------------------
-# NLP MODEL
-# --------------------
 if spacy is not None:
     try:
         nlp = spacy.load("en_core_web_sm")
@@ -54,9 +48,6 @@ app = FastAPI(
 )
 
 
-# --------------------
-# FILE HANDLING
-# --------------------
 def determine_file_type(filename: str) -> str:
     """Determine the file type based on the extension."""
     ext = os.path.splitext(filename)[1].lower()
@@ -70,7 +61,7 @@ def determine_file_type(filename: str) -> str:
 
 
 def save_file_to_storage(file: UploadFile, file_id: str) -> str:
-    """Save an uploaded file to local storage and return its path."""
+    """Save evidence and return the complete path to the file."""
     storage_dir = os.path.join("evidence_storage", file_id)
     os.makedirs(storage_dir, exist_ok=True)
 
@@ -79,15 +70,7 @@ def save_file_to_storage(file: UploadFile, file_id: str) -> str:
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    return file_path
-
-
-# --------------------
-# QUEUE / AUTH
-# --------------------
-def queue_processing_task(evidence_id: str):
-    """Queue the evidence for async processing by a worker."""
-    print(f"Queue created for Evidence ID: {evidence_id}")
+    return os.path.abspath(file_path)
 
 
 def get_current_user() -> int:
@@ -95,23 +78,22 @@ def get_current_user() -> int:
     return 1
 
 
-# --------------------
-# API ENDPOINTS
-# --------------------
 @app.post("/api/evidence/upload", status_code=202)
 async def upload_evidence(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     user_id: int = Depends(get_current_user),
 ):
-    """Receive a file, save it, and queue it for downstream analysis."""
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided.")
 
-    if SessionLocal is None or EvidenceFile is None:
-        raise HTTPException(status_code=500, detail="Database is not configured.")
-
     file_type = determine_file_type(file.filename)
+    if file_type not in {"image", "pdf", "text"}:
+        raise HTTPException(status_code=415, detail="Only JPG, JPEG, PNG, PDF and TXT files are supported.")
+
     evidence_id = str(uuid.uuid4())
+    storage_path = None
+    db = SessionLocal()
 
     try:
         storage_path = save_file_to_storage(file, evidence_id)
@@ -124,24 +106,24 @@ async def upload_evidence(
             status="RECEIVED",
         )
 
-        session = SessionLocal()
-        try:
-            session.add(new_evidence)
-            session.commit()
-        finally:
-            session.close()
+        db.add(new_evidence)
+        db.commit()
 
-        queue_processing_task(evidence_id)
+        background_tasks.add_task(process_evidence_task, evidence_id)
 
         return {
-            "message": "Evidence file received and queued for processing.",
+            "message": "Evidence received and processing scheduled.",
             "evidence_id": evidence_id,
             "file_type": file_type,
             "status": "RECEIVED",
         }
     except Exception as exc:
-        print(f"Upload error: {exc}")
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(exc)}")
+        db.rollback()
+        if storage_path and os.path.isfile(storage_path):
+            os.remove(storage_path)
+        raise HTTPException(status_code=500, detail=f"Evidence upload failed: {str(exc)}")
+    finally:
+        db.close()
 
 
 @app.get("/")
@@ -151,7 +133,6 @@ def read_root():
 
 @app.post("/analyze/ner")
 async def analyze_ner(request: EntityRequest):
-    """Extract named entities from evidence text."""
     if nlp is None:
         raise HTTPException(status_code=500, detail="spaCy model is not available.")
 

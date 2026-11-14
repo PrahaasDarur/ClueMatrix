@@ -1,7 +1,11 @@
 ﻿import os
 import uuid
 
-# OCR dependencies
+try:
+    import httpx
+except ImportError:
+    httpx = None
+
 try:
     import pytesseract
 except ImportError:
@@ -12,7 +16,6 @@ try:
 except ImportError:
     Image = None
 
-# NLP dependencies
 try:
     import spacy
 except ImportError:
@@ -23,9 +26,8 @@ try:
 except ImportError:
     pipeline = None
 
-# Database dependencies
 try:
-    from database.models import Base, EvidenceFile, ExtractedEntity, Relationships
+    from database.models import Base, EvidenceFile, ExtractedEntity
     from database.session import SessionLocal, engine
 except ImportError:
     Base = None
@@ -33,11 +35,9 @@ except ImportError:
     engine = None
     EvidenceFile = None
     ExtractedEntity = None
-    Relationships = None
 
-# --------------------
-# NLP MODEL
-# --------------------
+AI_SERVICE_URL = os.getenv("AI_SERVICE_URL", "http://127.0.0.1:8000")
+
 spacy_nlp = None
 transformer_nlp = None
 
@@ -58,9 +58,28 @@ if pipeline is not None:
 nlp = spacy_nlp or transformer_nlp
 
 
-# --------------------
-# OCR SECTION
-# --------------------
+def analyze_with_ai_service(raw_text: str, evidence_id: str, source_filename: str) -> list:
+    """Send extracted text to the AI service if it is available."""
+    if httpx is None:
+        raise RuntimeError("httpx is not installed.")
+
+    payload = {
+        "evidence_id": evidence_id,
+        "source_filename": source_filename,
+        "page_number": 1,
+        "text": raw_text,
+    }
+
+    response = httpx.post(f"{AI_SERVICE_URL}/analyze/evidence", json=payload, timeout=120.0)
+    response.raise_for_status()
+
+    result = response.json()
+    entities = result.get("entities", [])
+    if not isinstance(entities, list):
+        raise ValueError("AI service response 'entities' must be a list.")
+    return entities
+
+
 def perform_ocr(image_path: str) -> str:
     """Extract text from an image using Tesseract OCR."""
     print(f"OCR: Starting OCR on {image_path}...")
@@ -86,9 +105,6 @@ def perform_ocr(image_path: str) -> str:
         return ""
 
 
-# --------------------
-# NLP SECTION
-# --------------------
 def perform_nlp_analysis(raw_text: str, evidence_id: str):
     """Extract named entities from OCR text."""
     if nlp is None:
@@ -102,8 +118,7 @@ def perform_nlp_analysis(raw_text: str, evidence_id: str):
     print(f"NLP: Analyzing text for Evidence ID {evidence_id}...")
 
     if hasattr(nlp, "ents"):
-        doc = nlp(raw_text)
-        results = doc.ents
+        results = nlp(raw_text).ents
     else:
         results = nlp(raw_text)
 
@@ -111,14 +126,16 @@ def perform_nlp_analysis(raw_text: str, evidence_id: str):
     for entity in results:
         entity_type = getattr(entity, "label_", None) or entity.get("entity_group")
         entity_value = getattr(entity, "text", None) or entity.get("word")
-        context = raw_text
 
         if entity_type in {"PERSON", "DATE", "GPE", "LOC"}:
             extracted_data.append(
                 {
                     "type": entity_type,
                     "value": entity_value,
-                    "context": context,
+                    "context": raw_text,
+                    "start": getattr(entity, "start_char", None) or entity.get("start", 0),
+                    "end": getattr(entity, "end_char", None) or entity.get("end", 0),
+                    "method": "local-nlp",
                 }
             )
 
@@ -126,12 +143,9 @@ def perform_nlp_analysis(raw_text: str, evidence_id: str):
     return extracted_data
 
 
-# --------------------
-# DATABASE SECTION
-# --------------------
 def save_analysis_to_db(evidence_id: str, entities: list):
-    """Persist entities and relationships to the database."""
-    if SessionLocal is None or ExtractedEntity is None or Relationships is None:
+    """Persist entities to the database."""
+    if SessionLocal is None or ExtractedEntity is None:
         print("Database models are unavailable. Skipping persistence.")
         return
 
@@ -140,49 +154,24 @@ def save_analysis_to_db(evidence_id: str, entities: list):
         for entity in entities:
             new_entity = ExtractedEntity(
                 evidence_file_id=evidence_id,
-                entity_type=entity["type"],
-                value=entity["value"],
-                context=entity["context"],
+                entity_type=entity.get("type", "UNKNOWN"),
+                value=entity.get("value"),
+                context=entity.get("context"),
+                start_offset=entity.get("start"),
+                end_offset=entity.get("end"),
+                extraction_method=entity.get("method", "unknown"),
             )
             session.add(new_entity)
-            session.flush()
-            entity["id"] = new_entity.id
-
-        entities_by_context = {}
-        for entity in entities:
-            entities_by_context.setdefault(entity["context"], []).append(entity)
-
-        for entity_list in entities_by_context.values():
-            if len(entity_list) < 2:
-                continue
-
-            for i in range(len(entity_list)):
-                for j in range(i + 1, len(entity_list)):
-                    entity1 = entity_list[i]
-                    entity2 = entity_list[j]
-
-                    new_rel = Relationships(
-                        source_entity_id=entity1["id"],
-                        target_entity_id=entity2["id"],
-                        relationship_type="CO_OCCURRED_IN_SENTENCE",
-                        confidence_score=90,
-                    )
-                    session.add(new_rel)
 
         session.commit()
         print(f"Analysis saved for Evidence ID {evidence_id}.")
     except Exception as exc:
-        if hasattr(session, "rollback"):
-            session.rollback()
+        session.rollback()
         print(f"Database error for {evidence_id}: {exc}")
     finally:
-        if hasattr(session, "close"):
-            session.close()
+        session.close()
 
 
-# --------------------
-# PIPELINE SECTION
-# --------------------
 def process_evidence_task(evidence_id: str):
     """Run the evidence-processing pipeline for one record."""
     if SessionLocal is None or EvidenceFile is None or Base is None or engine is None:
@@ -216,9 +205,21 @@ def process_evidence_task(evidence_id: str):
         print(f"Worker failed: OCR produced no text for {evidence_id}.")
         return
 
-    extracted_data = perform_nlp_analysis(raw_text, evidence_id)
+    if httpx is not None:
+        try:
+            extracted_data = analyze_with_ai_service(
+                raw_text=raw_text,
+                evidence_id=evidence_id,
+                source_filename=os.path.basename(storage_path),
+            )
+        except Exception as exc:
+            print(f"AI service failed for {evidence_id}: {exc}. Falling back to local NLP.")
+            extracted_data = perform_nlp_analysis(raw_text, evidence_id)
+    else:
+        extracted_data = perform_nlp_analysis(raw_text, evidence_id)
+
     if not extracted_data:
-        print(f"Worker failed: NLP produced no entities for {evidence_id}.")
+        print(f"Worker failed: no entities were extracted for {evidence_id}.")
         return
 
     save_analysis_to_db(evidence_id, extracted_data)
