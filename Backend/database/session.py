@@ -1,12 +1,11 @@
+import os
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-# IMPORTANT: Update this connection string to match your actual PostgreSQL setup!
-DATABASE_URL = "postgresql://user:password@localhost/evidence_db" 
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./evidence.db")
+connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 
-# 1. Create the engine (connection to the DB)
-engine = create_engine(DATABASE_URL)
-
-# 2. Create the SessionLocal factory (This is the callable object)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine) 
+engine = create_engine(DATABASE_URL, connect_args=connect_args)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

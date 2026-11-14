@@ -2,7 +2,11 @@ import os
 import shutil
 import uuid
 
-import spacy
+try:
+    import spacy
+except ImportError:
+    spacy = None
+
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
@@ -13,8 +17,19 @@ except ImportError:
     SessionLocal = None
     EvidenceFile = None
 
-# Load the NLP model once when the API starts.
-nlp = spacy.load("en_core_web_sm")
+# --------------------
+# NLP MODEL
+# --------------------
+if spacy is not None:
+    try:
+        nlp = spacy.load("en_core_web_sm")
+        print("spaCy model loaded successfully.")
+    except OSError:
+        nlp = None
+        print("spaCy model 'en_core_web_sm' is not installed.")
+else:
+    nlp = None
+    print("spaCy is not installed.")
 
 NER_LABELS = {
     "PERSON",
@@ -39,6 +54,9 @@ app = FastAPI(
 )
 
 
+# --------------------
+# FILE HANDLING
+# --------------------
 def determine_file_type(filename: str) -> str:
     """Determine the file type based on the extension."""
     ext = os.path.splitext(filename)[1].lower()
@@ -52,7 +70,7 @@ def determine_file_type(filename: str) -> str:
 
 
 def save_file_to_storage(file: UploadFile, file_id: str) -> str:
-    """Persist the uploaded file to a local evidence storage directory."""
+    """Save an uploaded file to local storage and return its path."""
     storage_dir = os.path.join("evidence_storage", file_id)
     os.makedirs(storage_dir, exist_ok=True)
 
@@ -61,12 +79,15 @@ def save_file_to_storage(file: UploadFile, file_id: str) -> str:
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    return storage_dir
+    return file_path
 
 
+# --------------------
+# QUEUE / AUTH
+# --------------------
 def queue_processing_task(evidence_id: str):
     """Queue the evidence for async processing by a worker."""
-    print(f"--- TASK QUEUE: Task for Evidence ID {evidence_id} has been successfully queued for analysis. ---")
+    print(f"Queue created for Evidence ID: {evidence_id}")
 
 
 def get_current_user() -> int:
@@ -74,6 +95,9 @@ def get_current_user() -> int:
     return 1
 
 
+# --------------------
+# API ENDPOINTS
+# --------------------
 @app.post("/api/evidence/upload", status_code=202)
 async def upload_evidence(
     file: UploadFile = File(...),
@@ -99,8 +123,13 @@ async def upload_evidence(
             file_type=file_type,
             status="RECEIVED",
         )
-        SessionLocal.add(new_evidence)
-        SessionLocal.commit()
+
+        session = SessionLocal()
+        try:
+            session.add(new_evidence)
+            session.commit()
+        finally:
+            session.close()
 
         queue_processing_task(evidence_id)
 
@@ -111,7 +140,7 @@ async def upload_evidence(
             "status": "RECEIVED",
         }
     except Exception as exc:
-        print(f"An error occurred during upload: {exc}")
+        print(f"Upload error: {exc}")
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(exc)}")
 
 
@@ -123,6 +152,9 @@ def read_root():
 @app.post("/analyze/ner")
 async def analyze_ner(request: EntityRequest):
     """Extract named entities from evidence text."""
+    if nlp is None:
+        raise HTTPException(status_code=500, detail="spaCy model is not available.")
+
     doc = nlp(request.text)
     extracted_entities = []
 
