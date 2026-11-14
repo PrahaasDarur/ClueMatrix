@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+pytesseract
+psycopg2-binary
+spacy
+pillow
+python-multipart
+transformers
+torch

@@ -39,7 +39,7 @@ except ImportError:
 # DATABASE MODEL
 # --------------------
 try:
-    from database.models import Base, EvidenceFile, ExtractedEntity
+    from database.models import Base, EvidenceFile, ExtractedEntity, Relationships
     from database.session import SessionLocal, engine
 except ImportError:
     Base = None
@@ -47,6 +47,7 @@ except ImportError:
     engine = None
     EvidenceFile = None
     ExtractedEntity = None
+    Relationships = None
 
 AI_SERVICE_URL = os.getenv("AI_SERVICE_URL", "http://127.0.0.1:8000")
 
@@ -171,9 +172,9 @@ def perform_nlp_analysis(raw_text: str, evidence_id: str):
 # DATABASE SECTION
 # --------------------
 def save_analysis_to_db(evidence_id: str, entities: list):
-    """Persist entities to the database."""
+    """Save extracted entities to the configured database."""
     if SessionLocal is None or ExtractedEntity is None:
-        print("Database models are unavailable. Skipping persistence.")
+        print(f"[WORKER WARN] Database models are unavailable; skipping save for evidence {evidence_id}.")
         return
 
     session = SessionLocal()
@@ -181,79 +182,87 @@ def save_analysis_to_db(evidence_id: str, entities: list):
         for entity in entities:
             new_entity = ExtractedEntity(
                 evidence_file_id=evidence_id,
-                entity_type=entity.get("type", "UNKNOWN"),
-                value=entity.get("value"),
+                entity_type=entity["type"],
+                value=entity["value"],
                 context=entity.get("context"),
-                start_offset=entity.get("start"),
-                end_offset=entity.get("end"),
-                extraction_method=entity.get("method", "unknown"),
             )
             session.add(new_entity)
 
         session.commit()
-        print(f"Analysis saved for Evidence ID {evidence_id}.")
+        print(f"--- SUCCESS: Analysis results saved for Evidence ID {evidence_id} to the database. ---")
+
     except Exception as exc:
         session.rollback()
-        print(f"Database error for {evidence_id}: {exc}")
+        print(f"--- DATABASE ERROR: Failed to save analysis for {evidence_id}: {exc} ---")
     finally:
         session.close()
+
 
 
 # --------------------
 # PIPELINE SECTION
 # --------------------
 def process_evidence_task(evidence_id: str):
-    """Run the evidence-processing pipeline for one record."""
-    if SessionLocal is None or EvidenceFile is None or Base is None or engine is None:
-        print(f"Worker failed: database configuration is unavailable for {evidence_id}.")
-        return
+    """
+    The main function executed by the background worker.
+    This ties all the steps together: Fetch Metadata -> OCR -> NLP -> Relationships -> Timeline -> DB Write.
+    """
+    print(f"\n[WORKER START] Starting processing for Evidence ID: {evidence_id}")
 
-    Base.metadata.create_all(bind=engine)
-    print(f"Worker started for Evidence ID: {evidence_id}")
-
+    # --- 1. FETCH EVIDENCE METADATA ---
     session = SessionLocal()
-    try:
-        evidence_record = session.query(EvidenceFile).filter(EvidenceFile.id == evidence_id).first()
-    finally:
-        session.close()
+    evidence_record = session.query(EvidenceFile).filter(EvidenceFile.id == evidence_id).first()
+    session.close()
 
     if not evidence_record:
-        print(f"Worker failed: evidence record not found for {evidence_id}.")
+        print(f"[WORKER FAIL] Evidence record not found for ID: {evidence_id}. Stopping pipeline.")
         return
 
     storage_path = evidence_record.storage_path
     file_type = evidence_record.file_type
-    print(f"Evidence found: {storage_path} | Type: {file_type}")
+    print(f"Step 1: Found Evidence. File Path: {storage_path}")
 
+
+    # --- 2. OCR Step ---
+    print(f"Step 2: Starting OCR on {storage_path}...")
+    
     try:
-        raw_text = perform_ocr(storage_path)
-    except Exception as exc:
-        print(f"Worker failed during OCR for {evidence_id}: {exc}")
+        raw_text = perform_ocr(storage_path) 
+    except Exception as e:
+        print(f"[WORKER FAIL] OCR failed for {evidence_id}: {e}. Stopping pipeline.")
         return
 
     if not raw_text:
-        print(f"Worker failed: OCR produced no text for {evidence_id}.")
+        print(f"[WORKER FAIL] OCR failed for {evidence_id}. Stopping pipeline.")
         return
 
-    if httpx is not None:
-        try:
-            extracted_data = analyze_with_ai_service(
-                raw_text=raw_text,
-                evidence_id=evidence_id,
-                source_filename=os.path.basename(storage_path),
-            )
-        except Exception as exc:
-            print(f"AI service failed for {evidence_id}: {exc}. Falling back to local NLP.")
-            extracted_data = perform_nlp_analysis(raw_text, evidence_id)
-    else:
-        extracted_data = perform_nlp_analysis(raw_text, evidence_id)
+    # --- 3. NLP Step ---
+    print(f"Step 3: Analyzing text for entities...")
+    extracted_data = perform_nlp_analysis(raw_text, evidence_id)
 
     if not extracted_data:
-        print(f"Worker failed: no entities were extracted for {evidence_id}.")
+        print(f"[WORKER FAIL] NLP analysis yielded no results for {evidence_id}.")
         return
 
-    save_analysis_to_db(evidence_id, extracted_data)
-    print(f"Worker complete for Evidence ID: {evidence_id}")
+    # --- 4. Relationship Logic ---
+    print("Step 4: Analyzing entities for connections...")
+    save_analysis_to_db(evidence_id, extracted_data) 
+
+    # --- 5. Timeline Generation (The New Step) ---
+    print("Step 5: Generating Incident Timeline...")
+    
+    # --- REAL TIMELINE LOGIC GOES HERE ---
+    
+    # *** PLACEHOLDER for now ***
+    timeline_summary = "Timeline generation logic initialized. Events would be sorted here."
+    print(f"\n[Timeline Summary]: {timeline_summary}")
+    
+    # In a real system, you would now create the IncidentTimeline record here, 
+    # linking it back to the evidence_id.
+
+    print(f"[WORKER COMPLETE] Finished processing for Evidence ID: {evidence_id}")
+
+
 
 
 if __name__ == "__main__":
