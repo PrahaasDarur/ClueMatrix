@@ -57,43 +57,39 @@ export default function InvestigationDetail({
   const [error, setError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  async function handleFiles(files: FileList | null) {
-    if (!files || files.length === 0) return;
+  async function handleFiles(files) {
+    if (!files || files.length === 0) {
+        console.log("No file selected.");
+        return;
+    }
 
-    setError("");
-    setIsProcessing(true);
+    const file = files[0]; // We only handle the first file for this MVP
+    
+    const apiUrl = 'http://127.0.0.1:8000/api/evidence/upload';
+
+    const formData = new FormData();
+    formData.append('file', file); // 'file' MUST match what main.py expects!
 
     try {
-      const newRecords: EvidenceRecord[] = [];
-
-      for (const file of Array.from(files)) {
-        const buffer = await file.arrayBuffer();
-        const digest = await crypto.subtle.digest("SHA-256", buffer);
-
-        const hash = Array.from(new Uint8Array(digest))
-          .map((byte) => byte.toString(16).padStart(2, "0"))
-          .join("");
-
-        newRecords.push({
-          id: `${file.name}-${file.lastModified}-${file.size}`,
-          name: file.name,
-          size: file.size,
-          type: file.type || "Unknown file type",
-          hash,
-          addedAt: new Date().toLocaleString(),
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            body: formData // Send the file using FormData
         });
-      }
 
-      setEvidence((current) => [...newRecords, ...current]);
-    } catch {
-      setError(
-        "Could not calculate the file fingerprint. Try another file or browser.",
-      );
-    } finally {
-      setIsProcessing(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+        if (response.ok) { // Checks for status 200-299
+            const data = await response.json();
+            console.log("✅ Server Success:", data);
+            // Here, you would update the state to show "Job Queued"
+        } else {
+            const errorData = await response.json();
+            console.error("❌ Server Error:", errorData);
+        }
+
+    } catch (error) {
+        console.error("Network or Fetch Error:", error);
+        // Handle network failures here
     }
-  }
+}
 
   const tabs = [
     { id: "evidence", label: "Evidence", icon: Files },
